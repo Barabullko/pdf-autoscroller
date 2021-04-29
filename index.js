@@ -1,4 +1,4 @@
-var pdfjsLib = window['pdfjs-dist/build/pdf'];
+const pdfjsLib = window['pdfjs-dist/build/pdf'];
 
 // The workerSrc property shall be specified.
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://mozilla.github.io/pdf.js/build/pdf.worker.js';
@@ -9,17 +9,19 @@ var pdfDoc = null,
     pageNumPending = null,
     scrollSpeed = 10,
     isScrolling = false,
-    scrollIntervalId = null;
+    scrollIntervalId = null,
+    pdfPageHeight = null,
+    scale = null;
 
 function renderPDF(url, canvasContainer) {
     function detectScale(page) {
         const pdfContainer = document.getElementById('pdf-container');
         const containerWidth = pdfContainer.offsetWidth;
-        var scale = 1;
-        var shouldLoop = true;
+        let scale = 1;
+        let shouldLoop = true;
         while (shouldLoop) {
-            var viewport = page.getViewport({scale: scale});
-            var viewportWidth = viewport.width;
+            const viewport = page.getViewport({scale: scale});
+            const viewportWidth = viewport.width;
             if (viewportWidth < containerWidth) {
                 scale = scale * 1.5;
             } else {
@@ -33,14 +35,17 @@ function renderPDF(url, canvasContainer) {
     }
             
     function renderPage(page) {
-        const scale = detectScale(page);
-        var viewport = page.getViewport({scale: scale});
-        var canvas = document.createElement('canvas');
-        var ctx = canvas.getContext('2d');
-        var renderContext = {
+        if (!scale) {
+            scale = detectScale(page);
+        }
+        const viewport = page.getViewport({scale: scale});
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const renderContext = {
             canvasContext: ctx,
             viewport: viewport
         };
+        pdfPageHeight = viewport.height;
             
         canvas.height = viewport.height;
         canvas.width = viewport.width;
@@ -51,13 +56,36 @@ function renderPDF(url, canvasContainer) {
     }
         
     function renderPages(pdfDoc) {
-        for(var num = 1; num <= pdfDoc.numPages; num++)
+        for(let num = 1; num <= pdfDoc.numPages; num++)
             pdfDoc.getPage(num).then(renderPage);
     }
     
     pdfjsLib.disableWorker = true;
     pdfjsLib.getDocument(url).promise.then(renderPages);
-} 
+}
+
+
+// 1 = whole screen in 1 minute
+function getMinimumInterval(speed) {
+    let interval = 10;
+    let shouldLoop = true;
+    if (speed === 0) {
+        return interval;
+    }
+    while(shouldLoop) {   
+        let pixelsPerInterval = getPixelsPerInterval(interval, speed);
+        if (pixelsPerInterval > 0.5) {
+            shouldLoop = false;
+        } else {
+            interval += 1;
+        }
+    }
+    return interval;
+}
+
+function getPixelsPerInterval(interval, speed) {
+    return speed * pdfPageHeight / 600000 * interval;
+}
 
 document.addEventListener('DOMContentLoaded', () => {
     const fileInput = document.getElementById('file-input');
@@ -70,15 +98,38 @@ document.addEventListener('DOMContentLoaded', () => {
         const url = URL.createObjectURL(event.target.files[0]);
         renderPDF(url, pdfContainer);
     });
+
+    speedInput.addEventListener('change', (event) => {
+        if (isScrolling) {
+            clearInterval(scrollIntervalId);
+            const speed = parseInt(speedInput.value);
+            const interval = getMinimumInterval(speed);
+            const pixelsPerInterval = getPixelsPerInterval(interval, speed);
+            scrollIntervalId = setInterval(() => {
+                window.scrollBy({
+                    top: pixelsPerInterval,
+                    left: 0,
+                    behavior: 'smooth'
+                });
+            }, interval);
+        }
+    });
     
     startStopButton.addEventListener('click', (event) => {
         if (isScrolling) {
             clearInterval(scrollIntervalId);
             isScrolling = false;
         } else {
+            const speed = parseInt(speedInput.value);
+            const interval = getMinimumInterval(speed);
+            const pixelsPerInterval = getPixelsPerInterval(interval, speed);
             scrollIntervalId = setInterval(() => {
-                document.body.scrollTop += parseInt(speedInput.value);
-            }, 100);
+                window.scrollBy({ 
+                    top: pixelsPerInterval,
+                    left: 0, 
+                    behavior: 'smooth' 
+                  });
+            }, interval);
             isScrolling = true;
         }
     });
