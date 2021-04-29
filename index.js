@@ -69,7 +69,7 @@ function renderPDF(url, canvasContainer) {
 function getMinimumInterval(speed) {
     let interval = 10;
     let shouldLoop = true;
-    if (speed === 0) {
+    if (speed <= 0) {
         return interval;
     }
     while(shouldLoop) {   
